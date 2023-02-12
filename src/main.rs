@@ -11,9 +11,9 @@ pub struct NormalForm {
     negative: bool,
     add: Option<Box<NormalForm>>,
     mul: Option<Box<NormalForm>>,
-    pow: Option<Box<NormalForm>>,
     div: Option<Box<NormalForm>>,
     rem: Option<Box<NormalForm>>,
+    pow: Option<Box<NormalForm>>,
 }
 
 impl NormalForm {
@@ -34,14 +34,14 @@ impl NormalForm {
         if let Some(mul) = &self.mul {
             str = format!("({}*({}))", str, mul.format());
         }
-        if let Some(pow) = &self.pow {
-            str = format!("{}^({})", str, pow.format());
-        }
         if let Some(div) = &self.div {
             str = format!("{}/({})", str, div.format());
         }
         if let Some(rem) = &self.rem {
             str = format!("{}%({})", str, rem.format());
+        }
+        if let Some(pow) = &self.pow {
+            str = format!("{}^({})", str, pow.format());
         }
         str
     }
@@ -63,9 +63,6 @@ impl NormalForm {
         if let Some(mul) = &self.mul {
             v = v.overflowing_mul(mul.compute(vars)).0;
         }
-        if let Some(pow) = &self.pow {
-            v = v.overflowing_pow(pow.compute(vars) as u32).0;
-        }
         if let Some(div) = &self.div {
             let x = div.compute(vars);
             if x == 0 {
@@ -82,38 +79,46 @@ impl NormalForm {
                 v %= x;
             }
         }
+        if let Some(pow) = &self.pow {
+            v = v.overflowing_pow(pow.compute(vars) as u32).0;
+        }
         v
     }
 }
 
 pub fn generate(seed: u128) -> NormalForm {
-    let v = (seed % 8) as i32;
+    let v = (seed % 8) as usize;
+    let mut flags = [false; 8];
+    flags[(seed as usize >> 4) % 8] = true;
+    flags[(seed as usize >> 8) % 8] = true;
+    flags[(seed as usize >> 16) % 8] = true;
+
     NormalForm {
-        src: if v == 7 { Src::Var(0) } else { Src::Const(v) },
-        abs: (seed >> 4) & 1 == 1,
-        negative: (seed >> 5) & 1 == 1,
-        add: if (seed >> 6) & 1 == 1 {
-            Some(Box::new(generate((seed >> 11) + 1)))
+        src: if 10000 < seed || v == 7 { Src::Var(0) } else { Src::Const([0, 1, 2, 3, 5, 8, 16][v]) },
+        abs: flags[6],
+        negative: flags[7],
+        add: if flags[1] {
+            Some(Box::new(generate((seed >> 9) / 3 + 1)))
         } else {
             None
         },
-        mul: if (seed >> 7) & 1 == 1 {
-            Some(Box::new(generate((seed >> 12) + 1)))
+        mul: if flags[2] {
+            Some(Box::new(generate((seed >> 9) / 5 + 1)))
         } else {
             None
         },
-        pow: if (seed >> 8) & 1 == 1 {
-            Some(Box::new(generate((seed >> 13) + 1)))
+        div: if flags[3] {
+            Some(Box::new(generate((seed >> 9) / 7 + 1)))
         } else {
             None
         },
-        div: if (seed >> 9) & 1 == 1 {
-            Some(Box::new(generate((seed >> 14) + 1)))
+        rem: if flags[4] {
+            Some(Box::new(generate((seed >> 9) / 11 + 1)))
         } else {
             None
         },
-        rem: if (seed >> 10) & 1 == 1 {
-            Some(Box::new(generate((seed >> 15) + 1)))
+        pow: if flags[5] {
+            Some(Box::new(generate((seed >> 9) / 13 + 1)))
         } else {
             None
         },
@@ -127,9 +132,9 @@ fn main() {
         negative: false,
         add: None,
         mul: None,
-        pow: None,
         div: None,
         rem: None,
+        pow: None,
     };
     dbg!(form.compute(&[]));
 
@@ -140,8 +145,10 @@ fn main() {
     dbg!(generate(4));
     dbg!(generate(1234567).format());
     
-    for i in 0..10 {
-        let form = generate(1234567 + i * 123);
+    for i in 0..20 {
+        let key= 12345 * i + 654321;
+        // println!("{:b}", key);
+        let form = generate(key);
         println!("{:?}", &form.format());
         for j in 0..20 {
             let v = form.compute(&[j as i32]);
